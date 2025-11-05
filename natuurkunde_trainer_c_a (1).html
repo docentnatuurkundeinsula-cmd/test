@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Natuurkunde Trainer C.A. Elsman</title>
+  <!-- Tailwind via CDN (eenvoudig, geen build nodig) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Kleine utility voor icon-emoji align */
+    .ico { display:inline-flex; align-items:center; justify-content:center; width:1.25rem; height:1.25rem; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-orange-50 to-red-50">
+  <div id="app" class="p-4 md:p-8"></div>
+
+  <script>
+    // ===============================
+    // Natuurkunde Trainer (van React → pure HTML/JS)
+    // ===============================
+
+    // --------- Random helpers (seedable) ---------
+    function xmur3(str){ let h=1779033703 ^ str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h ^ str.charCodeAt(i),3432918353); h=(h<<13)|(h>>>19);} return function(){ h=Math.imul(h ^ (h>>>16),2246822507); h=Math.imul(h ^ (h>>>13),3266489909); h^=h>>>16; return h>>>0; } }
+    function mulberry32(a){ return function(){ let t=(a+=0x6d2b79f5); t=Math.imul(t ^ (t>>>15), t|1); t^=t + Math.imul(t ^ (t>>>7), t|61); return ((t ^ (t>>>14))>>>0)/4294967296; } }
+    function makeRng(seedStr){ const seed=xmur3(String(seedStr||Date.now()))(); const rng=mulberry32(seed); return ()=>rng(); }
+    function shuffleWithRng(arr, rng){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor((rng?rng():Math.random())*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+    // --------- UI helpers ---------
+    function levelColor(level){
+      if(level==='basis') return 'bg-green-100 text-green-800 border-green-300';
+      if(level==='gemiddeld') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      if(level==='uitdagend') return 'bg-red-100 text-red-800 border-red-300';
+      return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+    function typeColor(t){
+      if(t==='kennis') return 'bg-blue-100 text-blue-800 border-blue-300';
+      if(t==='toepassing') return 'bg-purple-100 text-purple-800 border-purple-300';
+      return 'bg-orange-100 text-orange-800 border-orange-300';
+    }
+    function typeLabel(t){ return t==='kennis'?'KENNIS':(t==='toepassing'?'TOEPASSING':'INZICHT'); }
+
+    // --------- Vragenbank ---------
+    const ALL = [
+      { id: 1, level: "basis", section: "P1", questionType: "kennis", question: "Wat is het verschil tussen gemiddelde snelheid en constante snelheid?", options: ["Er is geen verschil","Bij constante snelheid is de snelheid altijd hetzelfde, bij gemiddelde snelheid kan deze variëren","Gemiddelde snelheid is altijd hoger","Constante snelheid wordt alleen gebruikt bij autos"], correct: 1, explanation: "Bij constante snelheid blijft de snelheid op elk moment gelijk. Bij gemiddelde snelheid bereken je s/t." },
+      { id: 2, level: "basis", section: "P1", questionType: "kennis", question: "Hoe reken je km/h om naar m/s?", options: ["Vermenigvuldigen met 3,6","Delen door 3,6","Vermenigvuldigen met 10","Delen door 10"], correct: 1, explanation: "Van km/h naar m/s: delen door 3,6." },
+      { id: 3, level: "basis", section: "P2", questionType: "kennis", question: "Wat is de stopafstand?", options: ["Alleen de reactieafstand","Alleen de remweg","Reactieafstand + remweg","De afstand die je aflegt bij constante snelheid"], correct: 2, explanation: "Stopafstand = reactieafstand + remweg." },
+      { id: 4, level: "basis", section: "P2", questionType: "kennis", question: "De reactietijd van een bestuurder is gemiddeld:", options: ["0,2 seconden","0,8 seconden","1,5 seconden","2,0 seconden"], correct: 1, explanation: "Gemiddeld ~0,8 s." },
+      { id: 5, level: "basis", section: "P3", questionType: "toepassing", question: "Een schaatser legt 400 meter af in 32 seconden. Wat is de gemiddelde snelheid?", hint: "Gebruik v = s / t", options: ["10,5 m/s","12,5 m/s","15 m/s","20 m/s"], correct: 1, explanation: "400/32 = 12,5 m/s" },
+      { id: 6, level: "basis", section: "P3", questionType: "toepassing", question: "Een fietser rijdt met 18 km/h. Hoeveel m/s is dit?", hint: "Deel door 3,6", options: ["3 m/s","5 m/s","7 m/s","9 m/s"], correct: 1, explanation: "18/3,6 = 5 m/s" },
+      { id: 7, level: "basis", section: "P1", questionType: "toepassing", question: "Een hardloper rent 100 meter in 20 seconden. Wat is zijn gemiddelde snelheid?", hint: "Gebruik v = s / t", options: ["3 m/s","5 m/s","7 m/s","10 m/s"], correct: 1, explanation: "100/20 = 5 m/s" },
+      { id: 8, level: "basis", section: "P2", questionType: "toepassing", question: "Een auto rijdt 10 seconden met 20 m/s. Welke afstand legt de auto af?", hint: "Gebruik s = v × t", options: ["100 m","150 m","200 m","250 m"], correct: 2, explanation: "20 × 10 = 200 m" },
+      { id: 9, level: "basis", section: "P3", questionType: "inzicht", question: "In een v,t-diagram staat de snelheid op de verticale as. Wat betekent een horizontale lijn?", options: ["De beweging is gestopt","De snelheid neemt toe","De snelheid is constant","De snelheid neemt af"], correct: 2, explanation: "Horizontale lijn → v constant." },
+      { id: 10, level: "basis", section: "P1", questionType: "inzicht", question: "Waarom is de stopafstand bij hogere snelheid veel groter?", options: ["Alleen omdat de reactieafstand groter wordt","Omdat zowel reactieafstand als remweg groter worden","Omdat de auto zwaarder wordt","Omdat de weg gladder lijkt"], correct: 1, explanation: "Reactieafstand én remweg groeien met v." },
+      { id: 11, level: "gemiddeld", section: "P1", questionType: "kennis", question: "Wat is de reactieafstand?", options: ["Afstand tijdens remmen","Afstand tussen zien van gevaar en starten met remmen","Totale afstand tot stilstand","Afstand op het dashboard"], correct: 1, explanation: "Afstand tijdens reactietijd." },
+      { id: 12, level: "gemiddeld", section: "P1", questionType: "kennis", question: "In een s,t-diagram betekent een steilere lijn:", options: ["Lagere snelheid","Hogere snelheid","Constante snelheid","De beweging stopt"], correct: 1, explanation: "Steiler = hogere v." },
+      { id: 13, level: "gemiddeld", section: "P2", questionType: "toepassing", question: "Een auto rijdt 72 km/h. Hoeveel m/s is dit?", hint: "Eerst omrekenen naar m/s", options: ["15 m/s","20 m/s","25 m/s","30 m/s"], correct: 1, explanation: "72/3,6 = 20 m/s" },
+      { id: 14, level: "gemiddeld", section: "P2", questionType: "toepassing", question: "Een wielrenner rijdt met 36 km/h. Hoeveel m/s is dit?", hint: "Deel door 3,6", options: ["8 m/s","10 m/s","12 m/s","14 m/s"], correct: 1, explanation: "36/3,6 = 10 m/s" },
+      { id: 15, level: "gemiddeld", section: "P3", questionType: "toepassing", question: "90 km/h, reactietijd 0,8 s. Reactieafstand?", hint: "Reken 90 km/h → m/s", options: ["15 m","20 m","25 m","30 m"], correct: 1, explanation: "90 km/h = 25 m/s → 25 × 0,8 = 20 m" },
+      { id: 16, level: "gemiddeld", section: "P3", questionType: "toepassing", question: "Trein 15 min met 120 km/h. Afstand?", hint: "Zet 15 min → uren", options: ["20 km","25 km","30 km","35 km"], correct: 2, explanation: "120 × 0,25 = 30 km" },
+      { id: 17, level: "gemiddeld", section: "P1", questionType: "toepassing", question: "108 km/h, reactietijd 0,6 s. Reactieafstand?", hint: "Eerst naar m/s", options: ["12 m","15 m","18 m","21 m"], correct: 2, explanation: "108 = 30 m/s → 30 × 0,6 = 18 m" },
+      { id: 18, level: "gemiddeld", section: "P2", questionType: "inzicht", question: "80 → 120 km/h. Factor reactieafstand?", options: ["1,2","1,5","2","3"], correct: 1, explanation: "Evenredig met v: 1,5×" },
+      { id: 19, level: "gemiddeld", section: "P2", questionType: "inzicht", question: "In een v,t-diagram loopt de lijn schuin omhoog. Wat gebeurt er?", options: ["v↓","v constant","v↑","stop"], correct: 2, explanation: "Schuin omhoog = versnellen." },
+      { id: 20, level: "gemiddeld", section: "P3", questionType: "inzicht", question: "Waarom is het gevaarlijk om tijdens het rijden op je telefoon te kijken?", options: ["Reactietijd langer","Auto langzamer","Remmen slechter","Motor verbruikt meer"], correct: 0, explanation: "Afleiding verlengt reactietijd." },
+      { id: 21, level: "uitdagend", section: "P1", questionType: "kennis", question: "Wat is het verschil tussen versnelling en snelheid?", options: ["Geen","Snelheid = hoe snel; versnelling = hoe snel v verandert","Versnelling is altijd groter","Snelheid in m/s²"], correct: 1, explanation: "v in m/s; a in m/s²." },
+      { id: 22, level: "uitdagend", section: "P1", questionType: "kennis", question: "Wat is de remweg?", options: ["Afstand tijdens reactietijd","Afstand vanaf remmen tot stilstand","Totale stopafstand","Afstand op meter"], correct: 1, explanation: "Vanaf remmen tot stilstand." },
+      { id: 23, level: "uitdagend", section: "P2", questionType: "toepassing", question: "Auto 5 min 90 km/h. Afstand?", options: ["6 km","7,5 km","9 km","10,5 km"], correct: 1, explanation: "90 × 5/60 = 7,5 km" },
+      { id: 24, level: "uitdagend", section: "P2", questionType: "toepassing", question: "Trein 43 km met 120 km/h. Hoeveel minuten?", options: ["18","22","26","30"], correct: 1, explanation: "43/120 × 60 ≈ 22 min" },
+      { id: 25, level: "uitdagend", section: "P3", questionType: "toepassing", question: "Scooter 54 km/h, reactietijd 1,0 s. Reactieafstand?", options: ["10 m","15 m","20 m","25 m"], correct: 1, explanation: "54 = 15 m/s → 15 m" },
+      { id: 26, level: "uitdagend", section: "P3", questionType: "toepassing", question: "Fietser 12 km in 40 min. v (km/h)?", options: ["15","18","20","24"], correct: 1, explanation: "12/(40/60) = 18" },
+      { id: 27, level: "uitdagend", section: "P1", questionType: "toepassing", question: "Atleet 10 km in 45 min. v (m/s)?", options: ["3,2","3,7","4,2","4,7"], correct: 1, explanation: "10000/2700 ≈ 3,7" },
+      { id: 28, level: "uitdagend", section: "P2", questionType: "inzicht", question: "0→25 m/s in 40 s, dan 60 s constant. Totale s?", options: ["1000","1500","2000","2500"], correct: 2, explanation: "½·25·40=500; 25·60=1500 → 2000" },
+      { id: 29, level: "uitdagend", section: "P3", questionType: "inzicht", question: "0→20 m/s in 10 s, dan 30 s constant. Totale s?", options: ["500","700","800","1000"], correct: 1, explanation: "½·10·20=100; 30·20=600 → 700" },
+      { id: 30, level: "uitdagend", section: "P2", questionType: "inzicht", question: "Twee auto's rijden achter elkaar met 100 km/h. De eerste remt. Wat is het belangrijkst?", options: ["Kleur","Volgafstand","Merk","Muziek"], correct: 1, explanation: "Volgafstand ≥ stopafstand." },
+    ];
+
+    // --------- Balansparameters ---------
+    const ktiQuota10 = { kennis: 3, toepassing: 3, inzicht: 4 };
+    const sectionQuota10 = { P1: 4, P2: 3, P3: 3 };
+    const sectionOrder = ['P1','P2','P3'];
+
+    // --------- State ---------
+    const state = {
+      mode: 'oefenen',              // 'oefenen' | 'toets'
+      level: 'gemiddeld',           // voor oefenen
+      showFormulas: true,
+      quizStarted: false,
+      showSettings: true,
+      showHint: false,
+      seed: '',
+      rng: makeRng('seed'),
+
+      sessionQuestions: [],
+      shuffledMap: {},              // { [id]: { options:[], correct:index } }
+      currentQuestion: 0,
+      score: 0,
+      selectedAnswer: null,
+      showFeedback: false,
+      quizComplete: false,
+    };
+
+    // --------- Utilities ---------
+    function setSeed(seed){ state.seed = seed; state.rng = makeRng(seed || 'seed'); }
+    function shuffleSeeded(arr){ return shuffleWithRng(arr, state.rng); }
+
+    function approxQuota(quota, n){
+      const total = Object.values(quota).reduce((a,b)=>a+b,0);
+      const scaled = Object.fromEntries(Object.entries(quota).map(([k,v])=>[k, Math.floor((v/total)*n)]));
+      let sum = Object.values(scaled).reduce((a,b)=>a+b,0);
+      const order = Object.keys(quota);
+      let i=0; while(sum<n){ const k=order[i%order.length]; scaled[k]=(scaled[k]||0)+1; sum++; i++; }
+      return scaled;
+    }
+    function pickBalancedKTI(pool, quota){
+      const by={ kennis:[], toepassing:[], inzicht:[] };
+      pool.forEach(q=>by[q.questionType].push(q));
+      let out=[];
+      for(const t of Object.keys(by)){
+        const take = Math.min(quota[t]||0, by[t].length);
+        out = out.concat(shuffleSeeded(by[t]).slice(0,take));
+      }
+      const need = Object.values(quota).reduce((a,b)=>a+b,0) - out.length;
+      if(need>0){ const rest = pool.filter(q=>!out.includes(q)); out = out.concat(shuffleSeeded(rest).slice(0,need)); }
+      return out;
+    }
+    function pickBalanced(pool, sQuota, kQuota){
+      let out=[];
+      const bySec={ P1:[], P2:[], P3:[] };
+      pool.forEach(q=>bySec[q.section].push(q));
+      for(const s of sectionOrder){
+        const need = sQuota[s]||0; if(!need) continue;
+        const group = bySec[s]||[];
+        const kq = approxQuota(kQuota, need);
+        out = out.concat(pickBalancedKTI(group, kq));
+      }
+      if(out.length<10){ const rest=pool.filter(q=>!out.includes(q)); out = out.concat(shuffleSeeded(rest).slice(0, 10 - out.length)); }
+      return out.slice(0,10);
+    }
+    function buildShuffledMap(qs){
+      const m={};
+      qs.forEach(q=>{
+        const tagged = q.options.map((text,idx)=>({text,idx}));
+        const mixed = shuffleSeeded(tagged);
+        const correct = mixed.findIndex(o=>o.idx===q.correct);
+        m[q.id] = { options: mixed.map(o=>o.text), correct };
+      });
+      return m;
+    }
+
+    function startOefenen(){
+      const pool = ALL.filter(q=>q.level===state.level);
+      const picked = shuffleSeeded(pool).slice(0,10);
+      state.sessionQuestions = picked;
+      state.shuffledMap = buildShuffledMap(picked);
+      state.currentQuestion=0; state.score=0; state.selectedAnswer=null; state.showFeedback=false; state.quizComplete=false; state.showHint=false;
+      state.showSettings=false; state.quizStarted=true;
+      render();
+    }
+    function startToets(){
+      const picked = pickBalanced(ALL, sectionQuota10, ktiQuota10);
+      state.sessionQuestions = picked;
+      state.shuffledMap = buildShuffledMap(picked);
+      state.currentQuestion=0; state.score=0; state.selectedAnswer=null; state.showFeedback=false; state.quizComplete=false; state.showHint=false;
+      state.showSettings=false; state.quizStarted=true;
+      render();
+    }
+
+    // --------- Render helpers ---------
+    function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+    function setProgress(elm, pct){ elm.style.width = (pct||0) + '%'; }
+
+    function currentBaseQ(){ return state.sessionQuestions[state.currentQuestion] || null; }
+    function currentQ(){
+      const base = currentBaseQ(); if(!base) return null;
+      const sh = state.shuffledMap[base.id];
+      const correct = sh && sh.correct>=0 && sh.correct<sh.options.length ? sh.correct : 0;
+      return sh ? {...base, options: sh.options, correct} : {...base};
+    }
+
+    function handleAnswer(idx){ const q=currentQ(); if(!q) return; state.selectedAnswer=idx; state.showFeedback=true; if(idx===q.correct) state.score++; render(); }
+    function handleNext(){ if(state.currentQuestion < state.sessionQuestions.length-1){ state.currentQuestion++; state.showFeedback=false; state.selectedAnswer=null; state.showHint=false; } else { state.quizComplete=true; } render(); }
+    function handlePrev(){ if(state.currentQuestion===0) return; state.currentQuestion--; state.showFeedback=false; state.selectedAnswer=null; state.showHint=false; render(); }
+    function backToMenu(){ state.showSettings=true; state.quizStarted=false; state.quizComplete=false; state.currentQuestion=0; state.score=0; state.selectedAnswer=null; state.showFeedback=false; state.showHint=false; render(); }
+
+    // --------- Views ---------
+    function viewSettings(){
+      const questionsForLevel = ALL.filter(q=>q.level===state.level).length;
+      const root = el(`
+        <div class="max-w-2xl mx-auto">
+          <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-orange-500 to-red-500 p-6 text-white">
+              <div class="flex items-center gap-3">
+                <div class="ico text-2xl">⚙️</div>
+                <div>
+                  <h1 class="text-2xl md:text-3xl font-bold">Natuurkunde Trainer C.A. Elsman</h1>
+                  <p class="text-orange-100 mt-1">Hoofdstuk 4: Beweging — Instellingen</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-8 space-y-8">
+              <div>
+                <h2 class="text-xl font-bold text-gray-800 mb-4">📊 Modus & niveau</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button id="btn-oefenen" class="p-4 rounded-lg border-2 ${state.mode==='oefenen'?'border-blue-500 bg-blue-50':'border-gray-200 hover:border-blue-300'}">Oefenmodus (niveau)</button>
+                  <button id="btn-toets" class="p-4 rounded-lg border-2 ${state.mode==='toets'?'border-red-500 bg-red-50':'border-gray-200 hover:border-red-300'}">Toetsmodus (alle niveaus)</button>
+                </div>
+
+                ${state.mode==='oefenen' ? `
+                <div class="mt-4 space-y-3">
+                  <div class="text-sm text-gray-600">Kies niveau:</div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button data-level="basis" class="p-3 rounded-lg border-2 text-left ${state.level==='basis'?'border-yellow-500 bg-yellow-50':'border-gray-200 hover:border-yellow-300'}">⭐ Basis</button>
+                    <button data-level="gemiddeld" class="p-3 rounded-lg border-2 text-left ${state.level==='gemiddeld'?'border-yellow-500 bg-yellow-50':'border-gray-200 hover:border-yellow-300'}">⭐⭐ Gemiddeld</button>
+                    <button data-level="uitdagend" class="p-3 rounded-lg border-2 text-left ${state.level==='uitdagend'?'border-yellow-500 bg-yellow-50':'border-gray-200 hover:border-yellow-300'}">⭐⭐⭐ Uitdagend</button>
+                  </div>
+                  <div class="text-xs text-gray-500">Beschikbaar in dit niveau: ${questionsForLevel} vragen</div>
+                </div>` : ''}
+              </div>
+
+              <div>
+                <h2 class="text-xl font-bold text-gray-800 mb-4">📐 Formules</h2>
+                <div class="flex gap-3">
+                  <button id="btn-formules-aan" class="flex-1 p-3 rounded-lg border-2 ${state.showFormulas?'border-blue-500 bg-blue-50':'border-gray-200 hover:border-blue-300'}"><span class="ico">👁️</span> zichtbaar</button>
+                  <button id="btn-formules-uit" class="flex-1 p-3 rounded-lg border-2 ${!state.showFormulas?'border-blue-500 bg-blue-50':'border-gray-200 hover:border-blue-300'}"><span class="ico">🙈</span> verborgen</button>
+                </div>
+              </div>
+
+              <div>
+                <h2 class="text-xl font-bold text-gray-800 mb-4">🧪 Starten</h2>
+                <div class="flex gap-3 items-center">
+                  <button id="btn-start" class="flex-1 bg-gradient-to-r from-orange-500 to-red-500 text-white py-3 rounded-lg font-bold hover:from-orange-600 hover:to-red-600">Start ${state.mode==='toets'?'toets':'oefenen'}</button>
+                  <input id="seed" value="${state.seed}" placeholder="seed (optioneel)" class="w-40 p-2 rounded-lg border" />
+                </div>
+                ${state.mode==='toets' ? '<div class="text-xs text-gray-600 mt-2">Toets start via dezelfde knop; verdeling K/T/I en paragrafen wordt automatisch gebalanceerd.</div>' : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `);
+
+      // events
+      root.querySelector('#btn-oefenen').addEventListener('click', ()=>{ state.mode='oefenen'; render(); });
+      root.querySelector('#btn-toets').addEventListener('click', ()=>{ state.mode='toets'; render(); });
+      const lvlBtns = root.querySelectorAll('[data-level]');
+      lvlBtns.forEach(b=> b.addEventListener('click', ()=>{ state.level=b.getAttribute('data-level'); render(); }));
+      root.querySelector('#btn-formules-aan').addEventListener('click', ()=>{ state.showFormulas=true; render(); });
+      root.querySelector('#btn-formules-uit').addEventListener('click', ()=>{ state.showFormulas=false; render(); });
+      root.querySelector('#seed').addEventListener('input', (e)=>{ setSeed(e.target.value); });
+      root.querySelector('#btn-start').addEventListener('click', ()=>{ state.mode==='toets'? startToets(): startOefenen(); });
+
+      return root;
+    }
+
+    function viewResult(){
+      const total = state.sessionQuestions.length || 0;
+      const percentage = total ? Math.round((state.score/total)*100) : 0;
+      const levelChip = state.mode==='toets' ? 'Toets (alle niveaus)' : `Niveau: ${state.level}`;
+      const feedback = percentage>=90 ? 'Uitstekend! 🌟' : percentage>=70 ? 'Goed gedaan! 👍' : percentage>=50 ? 'Niet slecht! 📚' : 'Blijf oefenen! 💪';
+
+      const root = el(`
+        <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-2xl p-8">
+          <div class="text-center">
+            <div class="ico text-6xl mb-4">🏆</div>
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">Oefenen voltooid!</h2>
+            <div class="text-6xl font-bold text-orange-600 mb-2">${state.score}/${total}</div>
+            <div class="text-2xl text-gray-600 mb-6">${percentage}% correct</div>
+            <div class="inline-block px-4 py-2 rounded-full text-sm font-semibold mb-6 border-2 ${levelColor(state.mode==='toets' ? 'uitdagend' : state.level)}">${levelChip}</div>
+            <p class="text-lg text-gray-700 mb-8">${feedback}</p>
+            <div class="flex justify-center gap-3">
+              ${state.mode==='toets' ? '<button id="btn-menu" class="px-5 py-3 rounded-lg border hover:bg-gray-50">Terug naar hoofdmenu</button>' : ''}
+              <button id="btn-opnieuw" class="bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-700">⟲ Opnieuw</button>
+            </div>
+          </div>
+        </div>
+      `);
+
+      if(state.mode==='toets') root.querySelector('#btn-menu').addEventListener('click', backToMenu);
+      root.querySelector('#btn-opnieuw').addEventListener('click', ()=>{
+        state.quizComplete=false; state.currentQuestion=0; state.score=0; state.selectedAnswer=null; state.showFeedback=false; state.showHint=false; render();
+      });
+
+      return el('<div class="min-h-screen p-8"></div>').appendChild(root).parentNode;
+    }
+
+    function viewQuestion(){
+      const q = currentQ(); if(!q) return el('<div></div>');
+      const total = state.sessionQuestions.length || 0;
+      const progress = total ? Math.round(((state.currentQuestion+1)/total)*100) : 0;
+      const isCorrect = state.selectedAnswer === q.correct;
+
+      const root = el(`
+        <div class="max-w-3xl mx-auto">
+          <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-orange-500 to-red-500 p-6 text-white">
+              <div class="flex justify-between items-start">
+                <div>
+                  <h1 class="text-2xl md:text-3xl font-bold mb-2">Hoofdstuk 4: Beweging</h1>
+                  <p class="text-orange-100">${state.mode==='toets'?'Toetsmodus (alle niveaus)':`Niveau: ${state.level}`} • Vraag ${state.currentQuestion+1} van ${total}</p>
+                </div>
+                <div class="text-right">
+                  <div class="text-3xl font-bold">${state.score}</div>
+                  <div class="text-orange-100 text-sm">score</div>
+                </div>
+              </div>
+              <div class="w-full bg-white/20 h-2 rounded mt-4">
+                <div id="bar" class="bg-white h-2 rounded" style="width:0%"></div>
+              </div>
+            </div>
+
+            <div class="p-6 md:p-8 space-y-6">
+              <div class="flex flex-wrap gap-2">
+                ${state.mode==='oefenen' ? `<span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border ${levelColor(state.level)}">Niveau</span>` : ''}
+                <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border ${typeColor(q.questionType)}">${typeLabel(q.questionType)}</span>
+                <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border bg-gray-100 text-gray-800 border-gray-300">Paragraaf ${q.section}</span>
+              </div>
+
+              <h2 class="text-xl md:text-2xl font-bold text-gray-900">${q.question}</h2>
+
+              ${state.showFormulas ? `
+              <div class="rounded-lg border bg-blue-50 border-blue-200 p-4 text-sm text-blue-900">
+                <div class="font-semibold mb-1">Formules</div>
+                <ul class="list-disc ml-5 space-y-1">
+                  <li><code>v = s / t</code> (gemiddelde snelheid)</li>
+                  <li><code>s = v × t</code> (afstand)</li>
+                  <li><code>1 km/h = 1/3,6 m/s</code> (omrekening)</li>
+                  <li><code>stopafstand = reactieafstand + remweg</code></li>
+                </ul>
+              </div>` : ''}
+
+              ${q.hint ? `<button id="btn-hint" class="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 flex items-center gap-2">ℹ️ ${state.showHint? 'Verberg hint':'Toon hint'}</button>` : ''}
+              ${state.showHint && q.hint ? `<div class="rounded-lg border bg-yellow-50 border-yellow-200 p-3 text-sm text-yellow-900">${q.hint}</div>` : ''}
+
+              <div class="grid gap-3">
+                ${q.options.map((opt,idx)=>{
+                  const chosen = state.selectedAnswer===idx;
+                  const correct = q.correct===idx;
+                  const showState = state.showFeedback && (chosen || correct);
+                  const base = 'w-full text-left p-4 rounded-lg border transition-all';
+                  let cls = 'border-gray-200 hover:border-gray-300 hover:bg-gray-50';
+                  if(showState){ cls = correct ? 'border-green-500 bg-green-50' : (chosen ? 'border-red-500 bg-red-50' : 'border-gray-200'); }
+                  return `<button data-idx="${idx}" class="${base} ${cls}" ${state.showFeedback?'disabled':''}>
+                            <div class="flex items-center justify-between gap-4">
+                              <span class="text-gray-900">${opt}</span>
+                              ${showState ? (correct ? '<span class="ico">✅</span>' : (chosen ? '<span class="ico">❌</span>' : '')) : ''}
+                            </div>
+                          </button>`;
+                }).join('')}
+              </div>
+
+              ${state.showFeedback ? `
+              <div class="p-4 rounded-lg border ${isCorrect?'bg-green-50 border-green-300':'bg-red-50 border-red-300'}">
+                <div class="flex items-center gap-2 font-semibold mb-1">${isCorrect?'✅ Goed!':'❌ Helaas.'}</div>
+                <p class="text-gray-800">${q.explanation}</p>
+              </div>` : ''}
+
+              <div class="flex items-center justify-between pt-2">
+                <div class="flex items-center gap-2">
+                  ${state.mode!=='toets' ? '<button id="btn-menu" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-gray-50">◀ Hoofdmenu</button>' : ''}
+                  <button id="btn-prev" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border ${state.currentQuestion===0?'opacity-40 cursor-not-allowed':'hover:bg-gray-50'}" ${state.currentQuestion===0?'disabled':''}>◀ Vorige</button>
+                </div>
+                <button id="btn-next" class="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-white ${!state.showFeedback?'bg-gray-300 cursor-not-allowed':'bg-orange-600 hover:bg-orange-700'}" ${!state.showFeedback?'disabled':''}>
+                  ${state.currentQuestion < total-1 ? 'Volgende ▶' : 'Afronden ▶'}
+                </button>
+              </div>
+
+              <div class="text-sm text-gray-500 text-center">Vraag ${state.currentQuestion+1} van ${total} • Voortgang ${progress}%</div>
+            </div>
+          </div>
+        </div>
+      `);
+
+      // progress width
+      setProgress(root.querySelector('#bar'), progress);
+      // events
+      const optBtns = root.querySelectorAll('[data-idx]');
+      optBtns.forEach(b=> b.addEventListener('click', ()=> handleAnswer(parseInt(b.getAttribute('data-idx'),10))));
+      const prev = root.querySelector('#btn-prev'); if(prev) prev.addEventListener('click', handlePrev);
+      const next = root.querySelector('#btn-next'); if(next) next.addEventListener('click', handleNext);
+      const menu = root.querySelector('#btn-menu'); if(menu) menu.addEventListener('click', backToMenu);
+      const hint = root.querySelector('#btn-hint'); if(hint) hint.addEventListener('click', ()=>{ state.showHint=!state.showHint; render(); });
+
+      return root;
+    }
+
+    function render(){
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      if(state.showSettings && !state.quizStarted){ app.appendChild(viewSettings()); return; }
+      if(state.quizComplete){ const wrap = document.createElement('div'); wrap.className='min-h-screen p-8'; wrap.appendChild(viewResult()); app.appendChild(wrap); return; }
+      app.appendChild(viewQuestion());
+    }
+
+    // init
+    render();
+  </script>
+</body>
+</html>
